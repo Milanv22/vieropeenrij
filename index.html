@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vier op een Rij</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: één kolom, speelbord als held; scorekaarten erboven, knoppen eronder */
+:root {
+  --bg: #e9edf5;
+  --fg: #16203a;
+  --muted: #5a6683;
+  --card: #f7f9fd;
+  --line: #cfd7e8;
+  --board: #1d4fd8;
+  --board-hi: #3d6cf0;
+  --board-lo: #163fae;
+  --hole: #c9d3ea;
+  --p1: #e23b2e;
+  --p1-lo: #b52a20;
+  --p2: #f5c11b;
+  --p2-lo: #c99a0a;
+  --focus: #1d4fd8;
+  --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1322; --fg: #e8ecf6; --muted: #98a3c0; --card: #151d31; --line: #26304a;
+    --board: #2456e0; --board-hi: #4a76f2; --board-lo: #1a40b0; --hole: #0a0f1c;
+    --p1: #ef4a3c; --p1-lo: #b93125; --p2: #f7c62a; --p2-lo: #c99a0a; --focus: #7ea0ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1322; --fg: #e8ecf6; --muted: #98a3c0; --card: #151d31; --line: #26304a;
+  --board: #2456e0; --board-hi: #4a76f2; --board-lo: #1a40b0; --hole: #0a0f1c;
+  --p1: #ef4a3c; --p1-lo: #b93125; --p2: #f7c62a; --p2-lo: #c99a0a; --focus: #7ea0ff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(28px, 7vw, 40px);
+  line-height: 1;
+  margin: 0;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+h1 .four { color: var(--board); }
+.rules { color: var(--muted); font-size: 13px; margin: 0; }
+
+/* Scorekaarten */
+.players { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.player {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  transition: border-color .2s, transform .2s;
+  min-width: 0;
+}
+.player.active { border-color: var(--pc); transform: translateY(-2px); }
+.player[data-p="1"] { --pc: var(--p1); --pc-lo: var(--p1-lo); }
+.player[data-p="2"] { --pc: var(--p2); --pc-lo: var(--p2-lo); }
+.chip {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--pc) 0 56%, var(--pc-lo) 58% 66%, var(--pc) 68%);
+}
+.player input {
+  font: 600 16px/1.2 var(--font-display);
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 0;
+  width: 100%;
+  min-width: 0;
+}
+.player input:hover { border-bottom-color: var(--line); }
+.player input:focus { outline: none; border-bottom-color: var(--focus); }
+.score {
+  font: 700 22px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status */
+.status {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 34px;
+  font: 600 18px/1.2 var(--font-display);
+  text-align: center;
+}
+.status .chip { width: 22px; height: 22px; flex: none; }
+.status.win { animation: pop .5s ease-out; }
+@keyframes pop { 0% { transform: scale(.9); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
+
+/* Bord */
+.game { position: relative; }
+.preview {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  padding: 0 3.2%;
+  height: calc((100% - 6.4%) / 7);
+  aspect-ratio: auto;
+}
+.preview-row { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 3.2%; margin-bottom: 4px; }
+.ghost { aspect-ratio: 1; display: grid; place-items: center; }
+.ghost span {
+  width: 74%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--gc) 0 56%, var(--gc-lo) 58% 66%, var(--gc) 68%);
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .15s, transform .15s;
+}
+.ghost.on span { opacity: .9; transform: none; }
+.preview-row[data-p="1"] { --gc: var(--p1); --gc-lo: var(--p1-lo); }
+.preview-row[data-p="2"] { --gc: var(--p2); --gc-lo: var(--p2-lo); }
+
+.board {
+  position: relative;
+  background: linear-gradient(180deg, var(--board-hi), var(--board) 18%, var(--board-lo));
+  border-radius: 18px;
+  padding: 3.2%;
+  box-shadow: 0 10px 0 var(--board-lo), 0 18px 30px rgba(10, 25, 80, .25);
+}
+.field {
+  position: relative;
+  aspect-ratio: 7 / 6;
+  background: var(--hole);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.discs, .face, .cols {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+}
+.face {
+  background: linear-gradient(180deg, var(--board-hi), var(--board) 30%, var(--board-lo));
+  -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 78%, #000 80%);
+          mask-image: radial-gradient(circle closest-side, transparent 0 78%, #000 80%);
+  -webkit-mask-size: calc(100% / 7) calc(100% / 6);
+          mask-size: calc(100% / 7) calc(100% / 6);
+  -webkit-mask-repeat: repeat; mask-repeat: repeat;
+  pointer-events: none;
+}
+.cell { display: grid; place-items: center; animation: drop var(--t, .4s) cubic-bezier(.5, 0, .9, .4) both; }
+@keyframes drop {
+  0% { transform: translateY(calc(-100% * (var(--r) + 1))); }
+  72% { transform: translateY(0); animation-timing-function: ease-out; }
+  86% { transform: translateY(-9%); animation-timing-function: ease-in; }
+  100% { transform: translateY(0); }
+}
+.disc {
+  width: 84%; aspect-ratio: 1; border-radius: 50%;
+  position: relative;
+}
+.disc.p1 { background: radial-gradient(circle closest-side, var(--p1) 0 56%, var(--p1-lo) 58% 66%, var(--p1) 68%); }
+.disc.p2 { background: radial-gradient(circle closest-side, var(--p2) 0 56%, var(--p2-lo) 58% 66%, var(--p2) 68%); }
+.disc.winner::after {
+  content: ""; position: absolute; inset: 30%;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.35);
+  animation: glow 1.1s ease-in-out infinite alternate;
+}
+@keyframes glow { from { opacity: .55; transform: scale(.75); } to { opacity: 1; transform: scale(1); } }
+.discs.done .disc:not(.winner) { filter: saturate(.55) brightness(.85); transition: filter .4s; }
+
+.cols { grid-template-rows: 1fr; z-index: 2; }
+.cols button {
+  all: unset; cursor: pointer; height: 100%;
+  border-radius: 8px;
+}
+.cols button:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); }
+.cols button:disabled { cursor: default; }
+.colnums {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  padding: 0 3.2%; margin-top: 16px;
+  font: 600 12px/1 var(--font-display); color: var(--muted);
+  text-align: center; letter-spacing: .04em;
+}
+
+/* Knoppen */
+.controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.btn {
+  font: 600 15px/1 var(--font-display);
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 2px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+  transition: transform .1s, border-color .15s;
+}
+.btn:hover:not(:disabled) { border-color: var(--board); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--board); border-color: var(--board); color: #fff; }
+.btn.ghosty { border-color: transparent; background: transparent; color: var(--muted); font-size: 13px; }
+.hint { text-align: center; color: var(--muted); font-size: 12px; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cell, .status.win, .disc.winner::after { animation: none !important; }
+  .player, .ghost span { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Vier op een <span class="four">Rij</span></h1>
+    <p class="rules">Leg om de beurt een schijf. Vier op een lijn wint.</p>
+  </header>
+
+  <section class="players" aria-label="Spelers en score">
+    <div class="player" data-p="1">
+      <span class="chip" aria-hidden="true"></span>
+      <input id="name1" value="Speler 1" maxlength="16" aria-label="Naam speler 1 (rood)">
+      <span class="score" id="score1">0</span>
+    </div>
+    <div class="player" data-p="2">
+      <span class="chip" aria-hidden="true"></span>
+      <input id="name2" value="Speler 2" maxlength="16" aria-label="Naam speler 2 (geel)">
+      <span class="score" id="score2">0</span>
+    </div>
+  </section>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <div class="game">
+    <div class="preview-row" id="preview" data-p="1" aria-hidden="true"></div>
+    <div class="board">
+      <div class="field">
+        <div class="discs" id="discs"></div>
+        <div class="face"></div>
+        <div class="cols" id="cols"></div>
+      </div>
+    </div>
+    <div class="colnums" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="undo" type="button">Zet terug</button>
+    <button class="btn primary" id="newgame" type="button">Nieuw spel</button>
+    <button class="btn ghosty" id="resetscore" type="button">Score op 0</button>
+  </div>
+  <p class="hint">Klik of tik op een kolom. Toetsenbord: 1–7, of pijltjes en Enter.</p>
+</div>
+
+<script>
+(function () {
+  const COLS = 7, ROWS = 6;
+  const $ = (id) => document.getElementById(id);
+  const discsEl = $('discs'), colsEl = $('cols'), previewEl = $('preview'), statusEl = $('status');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let grid, moves, current, over, winLine, starter = 1, busy = false, hoverCol = 3;
+  let scores = { 1: 0, 2: 0 };
+
+  // Opgeslagen namen en score (alleen in deze browser)
+  try {
+    const s = JSON.parse(localStorage.getItem('vier-op-een-rij') || 'null');
+    if (s) {
+      scores = s.scores || scores;
+      if (s.names) { $('name1').value = s.names[1] || 'Speler 1'; $('name2').value = s.names[2] || 'Speler 2'; }
+    }
+  } catch (e) {}
+  function save() {
+    try {
+      localStorage.setItem('vier-op-een-rij', JSON.stringify({
+        scores, names: { 1: $('name1').value, 2: $('name2').value }
+      }));
+    } catch (e) {}
+  }
+  const name = (p) => ($('name' + p).value.trim() || ('Speler ' + p));
+  const chip = (p) => `<span class="chip" style="--pc:var(--p${p});--pc-lo:var(--p${p}-lo)" aria-hidden="true"></span>`;
+
+  // Kolomknoppen en voorbeeldschijven
+  for (let c = 0; c < COLS; c++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'col' + c;
+    b.setAttribute('aria-label', 'Kolom ' + (c + 1));
+    b.addEventListener('click', () => play(c));
+    b.addEventListener('pointerenter', () => setHover(c));
+    b.addEventListener('focus', () => setHover(c));
+    colsEl.appendChild(b);
+    const g = document.createElement('div');
+    g.className = 'ghost';
+    g.innerHTML = '<span></span>';
+    previewEl.appendChild(g);
+  }
+  colsEl.addEventListener('pointerleave', () => setHover(-1));
+
+  function setHover(c) {
+    hoverCol = c;
+    [...previewEl.children].forEach((g, i) => g.classList.toggle('on', i === c && !over && grid[0][i] === 0));
+  }
+
+  function newGame(first) {
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    moves = [];
+    over = false;
+    winLine = null;
+    current = first;
+    discsEl.innerHTML = '';
+    discsEl.classList.remove('done');
+    update();
+  }
+
+  function lowestRow(c) {
+    for (let r = ROWS - 1; r >= 0; r--) if (grid[r][c] === 0) return r;
+    return -1;
+  }
+
+  function play(c) {
+    if (over || busy) return;
+    const r = lowestRow(c);
+    if (r < 0) return;
+    grid[r][c] = current;
+    moves.push({ r, c, p: current });
+
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.style.gridColumn = c + 1;
+    cell.style.gridRow = r + 1;
+    cell.style.setProperty('--r', r);
+    const t = reduce ? 0 : 0.28 + r * 0.06;
+    cell.style.setProperty('--t', t + 's');
+    cell.dataset.key = r + '-' + c;
+    cell.innerHTML = `<div class="disc p${current}"></div>`;
+    discsEl.appendChild(cell);
+
+    busy = true;
+    setTimeout(() => { busy = false; }, t * 700);
+
+    const line = findWin(r, c, current);
+    if (line) {
+      over = true;
+      winLine = line;
+      scores[current]++;
+      setTimeout(markWin, t * 1000);
+    } else if (moves.length === ROWS * COLS) {
+      over = true;
+    } else {
+      current = current === 1 ? 2 : 1;
+    }
+    save();
+    update();
+  }
+
+  function findWin(r, c, p) {
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (const [dr, dc] of dirs) {
+      const line = [[r, c]];
+      for (const s of [1, -1]) {
+        let rr = r + dr * s, cc = c + dc * s;
+        while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && grid[rr][cc] === p) {
+          line.push([rr, cc]); rr += dr * s; cc += dc * s;
+        }
+      }
+      if (line.length >= 4) return line;
+    }
+    return null;
+  }
+
+  function markWin() {
+    if (!winLine) return;
+    discsEl.classList.add('done');
+    winLine.forEach(([r, c]) => {
+      const el = discsEl.querySelector(`[data-key="${r}-${c}"] .disc`);
+      if (el) el.classList.add('winner');
+    });
+  }
+
+  function undo() {
+    if (!moves.length || busy) return;
+    const last = moves.pop();
+    grid[last.r][last.c] = 0;
+    const el = discsEl.querySelector(`[data-key="${last.r}-${last.c}"]`);
+    if (el) el.remove();
+    if (winLine) { scores[last.p]--; save(); }
+    over = false;
+    winLine = null;
+    discsEl.classList.remove('done');
+    discsEl.querySelectorAll('.winner').forEach((d) => d.classList.remove('winner'));
+    current = last.p;
+    update();
+  }
+
+  function update() {
+    $('score1').textContent = scores[1];
+    $('score2').textContent = scores[2];
+    document.querySelectorAll('.player').forEach((el) =>
+      el.classList.toggle('active', !over && +el.dataset.p === current));
+    previewEl.dataset.p = current;
+
+    statusEl.classList.remove('win');
+    if (over && winLine) {
+      statusEl.innerHTML = `${chip(current)}<span>${escapeHtml(name(current))} wint!</span>`;
+      void statusEl.offsetWidth;
+      statusEl.classList.add('win');
+    } else if (over) {
+      statusEl.innerHTML = `<span>Gelijkspel: het bord is vol.</span>`;
+    } else {
+      statusEl.innerHTML = `${chip(current)}<span>${escapeHtml(name(current))} is aan zet</span>`;
+    }
+
+    for (let c = 0; c < COLS; c++) {
+      $('col' + c).disabled = over || grid[0][c] !== 0;
+    }
+    $('undo').disabled = moves.length === 0;
+    setHover(hoverCol);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  $('newgame').addEventListener('click', () => {
+    starter = starter === 1 ? 2 : 1; // om de beurt beginnen
+    newGame(starter);
+  });
+  $('undo').addEventListener('click', undo);
+  $('resetscore').addEventListener('click', () => { scores = { 1: 0, 2: 0 }; save(); update(); });
+  ['name1', 'name2'].forEach((id) => $(id).addEventListener('input', () => { save(); update(); }));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key >= '1' && e.key <= '7') { play(+e.key - 1); return; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const d = e.key === 'ArrowLeft' ? -1 : 1;
+      const next = Math.max(0, Math.min(COLS - 1, (hoverCol < 0 ? 3 : hoverCol) + d));
+      setHover(next);
+      e.preventDefault();
+    }
+    if ((e.key === 'Enter' || e.key === 'ArrowDown') && hoverCol >= 0 && document.activeElement?.parentElement !== colsEl) {
+      play(hoverCol);
+      e.preventDefault();
+    }
+    if (e.key === 'Backspace' || (e.key === 'z' && (e.ctrlKey || e.metaKey))) { undo(); e.preventDefault(); }
+  });
+
+  newGame(starter);
+})();
+</script>
+</body>
+</html>
